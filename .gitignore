@@ -1,0 +1,26 @@
+# Python
+__pycache__/
+*.pyc
+
+# Jupyter
+.ipynb_checkpoints/
+.virtual_documents/
+
+# Environment
+.env
+.venv/
+venv/
+
+# macOS
+.DS_Store
+
+# Raw and processed datasets
+data/raw/*.csv
+data/processed/*.csv
+
+# Local Anaconda files
+anaconda_projects/
+
+# ML experiment artifacts
+mlruns/*
+!mlruns/.gitkeep

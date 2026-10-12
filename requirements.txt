@@ -1,7 +1,5 @@
 numpy
 pandas
-scikit-learn
-xgboost
 joblib
 fastapi
 uvicorn
@@ -12,3 +10,5 @@ redis
 streamlit
 requests
 pytest
+scikit-learn==1.7.2
+xgboost==3.3.0

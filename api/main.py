@@ -49,29 +49,15 @@ THRESHOLD_PATH = (
 # Environment
 # ==================================================
 
-POSTGRES_HOST = os.getenv(
-    "POSTGRES_HOST",
-    "localhost",
-)
+POSTGRES_HOST = os.getenv("POSTGRES_HOST", "localhost")
+POSTGRES_PORT = int(os.getenv("POSTGRES_PORT", "5432"))
+POSTGRES_DB = os.getenv("POSTGRES_DB", "fraud_detection")
+POSTGRES_USER = os.getenv("POSTGRES_USER", "fraud_user")
+POSTGRES_PASSWORD = os.getenv("POSTGRES_PASSWORD", "fraud_password")
 
-POSTGRES_PORT = int(
-    os.getenv(
-        "POSTGRES_PORT",
-        "5432",
-    )
-)
-
-REDIS_HOST = os.getenv(
-    "REDIS_HOST",
-    "localhost",
-)
-
-REDIS_PORT = int(
-    os.getenv(
-        "REDIS_PORT",
-        "6379",
-    )
-)
+REDIS_HOST = os.getenv("REDIS_HOST", "localhost")
+REDIS_PORT = int(os.getenv("REDIS_PORT", "6379"))
+REDIS_PASSWORD = os.getenv("REDIS_PASSWORD") or None
 
 
 # ==================================================
@@ -118,27 +104,34 @@ FRAUD_THRESHOLD = threshold_config[
 # PostgreSQL
 # ==================================================
 
-def get_db_connection():
 
+def get_db_connection():
     return psycopg2.connect(
         host=POSTGRES_HOST,
         port=POSTGRES_PORT,
-        database="fraud_detection",
-        user="fraud_user",
-        password="fraud_password",
+        database=POSTGRES_DB,
+        user=POSTGRES_USER,
+        password=POSTGRES_PASSWORD,
+        connect_timeout=10,
     )
+
 
 
 # ==================================================
 # Redis
 # ==================================================
 
+
 redis_client = redis.Redis(
     host=REDIS_HOST,
     port=REDIS_PORT,
+    password=REDIS_PASSWORD,
     db=0,
     decode_responses=True,
+    socket_connect_timeout=5,
+    socket_timeout=5,
 )
+
 
 
 # ==================================================

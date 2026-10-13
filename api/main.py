@@ -303,62 +303,120 @@ def health():
         "redis": redis_status,
     }
 
-
 # ==================================================
 # Prediction
 # ==================================================
 
 @app.post("/predict")
-def predict(
-    transaction: Transaction
-):
+def predict(transaction: Transaction):
+    transaction_dict = transaction.model_dump()
 
-    transaction_dict = (
-        transaction.model_dump()
-    )
-
-    features = create_features(
-        transaction_dict
-    )
-
-    processed_features = (
-        preprocessor.transform(
-            features
-        )
-    )
+    # 1. Prepare features and run the trained model
+    features = create_features(transaction_dict)
+    processed_features = preprocessor.transform(features)
 
     fraud_probability = float(
-        model.predict_proba(
-            processed_features
-        )[0, 1]
+        model.predict_proba(processed_features)[0, 1]
     )
 
-    is_fraud = int(
-        fraud_probability
-        >= FRAUD_THRESHOLD
-    )
+    is_fraud = int(fraud_probability >= FRAUD_THRESHOLD)
+    risk_score = fraud_probability * 100
+    risk_level = get_risk_level(fraud_probability)
 
-    risk_score = (
-        fraud_probability * 100
-    )
+    # 2. Save the prediction to PostgreSQL
+    connection = None
 
-    risk_level = get_risk_level(
-        fraud_probability
-    )
+    try:
+        connection = get_db_connection()
 
+        with connection.cursor() as cursor:
+            cursor.execute(
+                """
+                INSERT INTO fraud_predictions (
+                    step,
+                    transaction_type,
+                    amount,
+                    origin_account,
+                    destination_account,
+                    old_balance_origin,
+                    new_balance_origin,
+                    old_balance_destination,
+                    new_balance_destination,
+                    fraud_probability,
+                    risk_score,
+                    is_fraud,
+                    risk_level
+                )
+                VALUES (
+                    %s, %s, %s, %s, %s, %s, %s,
+                    %s, %s, %s, %s, %s, %s
+                )
+                """,
+                (
+                    transaction.step,
+                    transaction.type,
+                    transaction.amount,
+                    transaction.nameOrig,
+                    transaction.nameDest,
+                    transaction.oldbalanceOrg,
+                    transaction.newbalanceOrig,
+                    transaction.oldbalanceDest,
+                    transaction.newbalanceDest,
+                    fraud_probability,
+                    risk_score,
+                    is_fraud,
+                    risk_level,
+                ),
+            )
+
+        connection.commit()
+
+    except Exception:
+        if connection is not None:
+            connection.rollback()
+
+        raise HTTPException(
+            status_code=500,
+            detail="Prediction was generated, but saving it to the database failed.",
+        )
+
+    finally:
+        if connection is not None:
+            connection.close()
+
+    # 3. Cache account risk in Redis for account-risk lookup
+    risk_data = {
+        "account_id": transaction.nameOrig,
+        "fraud_probability": str(round(fraud_probability, 6)),
+        "risk_score": str(round(risk_score, 2)),
+        "is_fraud": str(is_fraud),
+        "risk_level": risk_level,
+        "amount": str(transaction.amount),
+        "step": str(transaction.step),
+    }
+
+    try:
+        redis_client.hset(
+            f"risk:{transaction.nameOrig}",
+            mapping=risk_data,
+        )
+        redis_client.expire(
+            f"risk:{transaction.nameOrig}",
+            86400,
+        )
+    except redis.RedisError:
+        # PostgreSQL persistence succeeded; prediction can still be returned.
+        pass
+
+    # 4. Return the prediction
     return {
-        "fraud_probability": round(
-            fraud_probability,
-            6,
-        ),
-        "risk_score": round(
-            risk_score,
-            2,
-        ),
+        "fraud_probability": round(fraud_probability, 6),
+        "risk_score": round(risk_score, 2),
         "is_fraud": is_fraud,
         "risk_level": risk_level,
         "threshold": FRAUD_THRESHOLD,
     }
+
 
 
 # ==================================================
